@@ -1,73 +1,123 @@
-import speech_recognition as sr
-import openai
-import todoist
+import pygame
+import sys
+import random
 
-# Set your OpenAI and Todoist API keys
-openai.api_key = "YOUR_OPENAI_API_KEY"
-todoist.api_key = "YOUR_TODOIST_API_KEY"
+# Initialize Pygame
+pygame.init()
 
-def get_response(query):
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=query,
-        max_tokens=1024,
-        n=1,
-        stop=None,
-        temperature=0.5,
-    )
-    return response.choices[0].text
+# Constants
+WIDTH, HEIGHT = 800, 600
+FPS = 60
 
-def listen_for_command():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("Listening...")
-        audio = r.listen(source)
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GREEN = (0, 255, 0)
 
-    try:
-        text = r.recognize_google(audio)
-        print("You said:", text)
-        return text
-    except sr.UnknownValueError:
-        print("Could not understand audio")
-    except sr.RequestError as e:
-        print("Could not request results; {0}".format(e))
+# Load assets
+PLAYER_IMAGE = pygame.Surface((50, 50))
+PLAYER_IMAGE.fill((0, 0, 255))  # Player color
 
-def create_task(task_description):
-    task = todoist.Task(content=task_description)
-    task.add()
-    print("Task added:", task.content)
+OBSTACLE_IMAGE = pygame.Surface((50, 50))
+OBSTACLE_IMAGE.fill((255, 0, 0))  # Obstacle color
 
-def get_reminders():
-    reminders = todoist.get_reminders()
-    if reminders:
-        print("Reminders:")
-        for reminder in reminders:
-            print(f"- {reminder.content}")
-    else:
-        print("No reminders found.")
+BACKGROUND_IMAGE = pygame.Surface((WIDTH, HEIGHT))
+BACKGROUND_IMAGE.fill((135, 206, 235))  # Sky color
 
-def track_app_usage():
-    # Implement app usage tracking using device-specific APIs or third-party libraries
-    # ...
+# Font
+FONT = pygame.font.Font(None, 36)
 
-def limit_app_usage(app_name, limit_minutes):
-    # Implement app usage limiting using device-specific mechanisms or security libraries
-    # ...
+class Player:
+    def __init__(self):
+        self.rect = PLAYER_IMAGE.get_rect(center=(WIDTH // 2, HEIGHT - 70))
+        self.score = 0
+        self.speed = 5
 
-while True:
-    user_input = listen_for_command()
-    if user_input:
-        if "create task" in user_input:
-            task_description = user_input.replace("create task", "").strip()
-            create_task(task_description)
-        elif "get reminders" in user_input:
-            get_reminders()
-        elif "track app usage" in user_input:
-            track_app_usage()
-        elif "limit app usage" in user_input:
-            app_name = user_input.split()[3]
-            limit_minutes = int(user_input.split()[5])
-            limit_app_usage(app_name, limit_minutes)
-        else:
-            response = get_response(user_input)
-            print("AI:", response)
+    def draw(self, surface):
+        surface.blit(PLAYER_IMAGE, self.rect)
+
+    def update(self):
+        self.score += 1  # Increment score for each frame
+
+class Obstacle:
+    def __init__(self, x):
+        self.rect = OBSTACLE_IMAGE.get_rect(topleft=(x, 0))
+        self.speed = 5
+
+    def update(self):
+        self.rect.y += self.speed  # Move downwards
+
+    def draw(self, surface):
+        surface.blit(OBSTACLE_IMAGE, self.rect)
+
+def main():
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Subway Surfer Clone")
+    clock = pygame.time.Clock()
+
+    player = Player()
+    obstacles = []
+    spawn_timer = 0
+    game_over = False
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        if not game_over:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_a] and player.rect.left > 0:
+                player.rect.x -= player.speed  # Move left
+            if keys[pygame.K_d] and player.rect.right < WIDTH:
+                player.rect.x += player.speed  # Move right
+            if keys[pygame.K_w] and player.rect.top > 0:
+                player.rect.y -= player.speed  # Move up
+            if keys[pygame.K_s] and player.rect.bottom < HEIGHT:
+                player.rect.y += player.speed  # Move down
+
+            # Spawn obstacles
+            spawn_timer += 1
+            if spawn_timer > 30:  # Adjust spawn rate
+                spawn_timer = 0
+                x = random.randint(0, WIDTH - 50)
+                obstacles.append(Obstacle(x))
+
+            # Update and draw obstacles
+            for obstacle in obstacles[:]:
+                obstacle.update()
+                if obstacle.rect.top > HEIGHT:
+                    obstacles.remove(obstacle)  # Remove off-screen obstacles
+                if obstacle.rect.colliderect(player.rect):
+                    game_over = True  # Collision detected
+
+            player.update()
+
+        # Fill the screen
+        screen.blit(BACKGROUND_IMAGE, (0, 0))
+
+        # Draw player and obstacles
+        player.draw(screen)
+        for obstacle in obstacles:
+            obstacle.draw(screen)
+
+        # Display score
+        draw_text(screen, f"Score: {player.score}", (10, 10))
+
+        if game_over:
+            draw_text(screen, "Game Over!", (WIDTH // 2 - 70, HEIGHT // 2 - 20))
+            draw_text(screen, "Press R to Restart", (WIDTH // 2 - 100, HEIGHT // 2 + 20))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+        if game_over and keys[pygame.K_r]:
+            main()  # Restart the game
+
+def draw_text(surface, text, position, color=BLACK):
+    label = FONT.render(text, True, color)
+    surface.blit(label, position)
+
+if __name__ == "__main__":
+    main()
